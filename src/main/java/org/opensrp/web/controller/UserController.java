@@ -20,9 +20,11 @@ import org.joda.time.DateTime;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.opensrp.api.domain.Location;
 import org.opensrp.api.domain.Time;
 import org.opensrp.api.domain.User;
 import org.opensrp.api.util.LocationTree;
+import org.opensrp.api.util.TreeNode;
 import org.opensrp.common.domain.UserDetail;
 import org.opensrp.connector.openmrs.service.OpenmrsLocationService;
 import org.opensrp.connector.openmrs.service.OpenmrsUserService;
@@ -34,6 +36,8 @@ import org.opensrp.domain.Practitioner;
 import org.opensrp.service.OrganizationService;
 import org.opensrp.service.PhysicalLocationService;
 import org.opensrp.service.PractitionerService;
+import org.opensrp.web.openmrsConnector.KipOpenmrsLocationService;
+import org.opensrp.web.openmrsConnector.OpenmrsRelationshipService;
 import org.opensrp.web.rest.RestUtils;
 import org.opensrp.web.security.DrishtiAuthenticationProvider;
 import org.opensrp.web.utils.LocationUtils;
@@ -76,6 +80,10 @@ public class UserController {
 
 	private PhysicalLocationService locationService;
 
+	private OpenmrsRelationshipService openmrsRelationshipService;
+
+	private KipOpenmrsLocationService kipOpenmrsLocationService;
+
 	@Value("#{opensrp['openmrs.version']}")
 	protected String OPENMRS_VERSION;
 
@@ -84,10 +92,12 @@ public class UserController {
 
 	@Autowired
 	public UserController(OpenmrsLocationService openmrsLocationService, OpenmrsUserService openmrsUserService,
-			DrishtiAuthenticationProvider opensrpAuthenticationProvider) {
+			DrishtiAuthenticationProvider opensrpAuthenticationProvider, OpenmrsRelationshipService openmrsRelationshipServic, KipOpenmrsLocationService kipOpenmrsLocationService) {
 		this.openmrsLocationService = openmrsLocationService;
 		this.openmrsUserService = openmrsUserService;
 		this.opensrpAuthenticationProvider = opensrpAuthenticationProvider;
+		this.openmrsRelationshipService = openmrsRelationshipServic;
+		this.kipOpenmrsLocationService = kipOpenmrsLocationService;
 	}
 
 	/**
@@ -207,8 +217,25 @@ public class UserController {
 			}
 		}
 		LocationTree l = openmrsLocationService.getLocationTreeOf(lid.split(";;"));
+
+		Map<String, org.opensrp.api.util.TreeNode<String, org.opensrp.api.domain.Location>> userLocations = l.getLocationsHierarchy();
+
+		String lids = "";
+		for(String k : userLocations.keySet()){
+			TreeNode<String, Location> t = userLocations.get(k);
+			lids += t.getId() + ";;";
+		}
+		JSONObject locations;
+		if(org.apache.commons.lang3.StringUtils.isNotBlank(lids)){
+			locations = kipOpenmrsLocationService.getLocationTree(lids.split(";;"));
+		} else{
+			locations = new JSONObject();
+		}
+
+
 		Map<String, Object> map = new HashMap<>();
 		map.put("user", u);
+
 		try {
 			Map<String, Object> tmap = new Gson().fromJson(tm.toString(), new TypeToken<HashMap<String, Object>>() {
 
@@ -218,8 +245,27 @@ public class UserController {
 			e.printStackTrace();
 		}
 		map.put("locations", l);
+
+		try{
+			Map<String, Object> lMap = new Gson().fromJson(locations.toString(), new TypeToken<HashMap<String, Object>>() {}.getType());
+			map.put("userLocations", lMap);
+		}
+		catch(Exception e){
+			e.printStackTrace();
+		}
+
 		Time t = getServerTime();
 		map.put("time", t);
+
+		try{
+			JSONObject relationshipTypes = openmrsRelationshipService.getRelationshipTypes();
+			Map<String, Object> rmap = new Gson().fromJson(relationshipTypes.toString(), new TypeToken<HashMap<String, Object>>() {}.getType());
+			map.put("relationshipTypes", rmap);
+		}
+		catch(Exception e){
+			e.printStackTrace();
+		}
+
 		return new ResponseEntity<>(new Gson().toJson(map), RestUtils.getJSONUTF8Headers(), OK);
 	}
 

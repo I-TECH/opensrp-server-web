@@ -15,9 +15,9 @@ import com.google.gson.Gson;
 @Controller
 @RequestMapping("/location/")
 public class LocationController {
-	
+
 	private OpenmrsLocationService openmrsLocationService;
-	
+
 	@Autowired
 	public LocationController(OpenmrsLocationService openmrsLocationService) {
 		this.openmrsLocationService = openmrsLocationService;
